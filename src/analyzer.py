@@ -11,9 +11,17 @@ REQUIRED_COLUMNS = [
     "safety_stock_days", "selling_price", "unit_cogs", "platform_fees", "ad_spend_per_unit",
 ]
 NUMERIC_COLUMNS = [column for column in REQUIRED_COLUMNS if column not in {"sku_id", "product_name"}]
-EXCEPTION_COLUMNS = REQUIRED_COLUMNS + [
-    "daily_velocity", "days_of_supply", "reorder_threshold_days", "suggested_reorder_qty",
-    "net_margin_pct", "status",
+EXCEPTION_COLUMNS = [
+    "sku_id",
+    "product_name",
+    "flag_status",
+    "current_stock",
+    "daily_velocity",
+    "days_of_supply",
+    "reorder_threshold_days",
+    "suggested_reorder_qty",
+    "net_margin_pct",
+    "action_note",
 ]
 
 
@@ -56,4 +64,9 @@ def analyze_skus(raw_data: pd.DataFrame) -> pd.DataFrame:
     data.loc[reorder_needed & ~low_margin, "status"] = "REORDER NOW"
     data.loc[~reorder_needed & low_margin, "status"] = "LOW MARGIN AUDIT"
     data.loc[reorder_needed & low_margin, "status"] = "REORDER + LOW MARGIN"
+    data["flag_status"] = data["status"]
+    data["action_note"] = "No action required"
+    data.loc[reorder_needed & ~low_margin, "action_note"] = "Place replenishment order now."
+    data.loc[~reorder_needed & low_margin, "action_note"] = "Review pricing, costs, fees, and advertising spend."
+    data.loc[reorder_needed & low_margin, "action_note"] = "Reorder now and audit margin before replenishment."
     return data.loc[data["status"] != "HEALTHY", EXCEPTION_COLUMNS].reset_index(drop=True)

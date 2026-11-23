@@ -24,7 +24,7 @@ def send_exception_digest(exceptions: pd.DataFrame, sheet_url: str) -> None:
     lines = [f"{len(exceptions)} SKU exception(s) found.", ""]
     for _, row in exceptions.iterrows():
         lines.append(
-            f"- {row['sku_id']} | {row['product_name']} | {row['status']} | "
+            f"- {row['sku_id']} | {row['product_name']} | {row['flag_status']} | "
             f"days supply: {row['days_of_supply']:.1f} | margin: {row['net_margin_pct']:.1f}%"
         )
     lines.extend(["", f"Review the Action_Exceptions tab: {sheet_url}"])
