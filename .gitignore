@@ -1,0 +1,13 @@
+# Virtual environments and Python cache
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Secrets: never commit these files
+credentials.json
+.env
+
+# Editor and operating-system files
+.vscode/
+.DS_Store
