@@ -8,7 +8,7 @@ It reads a Google Sheet, calculates stock coverage and unit net margin, writes o
 
 Inventory planning is often a manual review of a spreadsheet. This automation turns that review into a repeatable daily process: it applies defined business rules, records what happened, and alerts a reviewer only when a SKU needs attention.
 
-**Status:** Live scheduled automation — verified via local execution and GitHub Actions (processes 10 SKUs and flags 5 exceptions in ~2–3 seconds per run vs. a 15-minute manual review baseline).
+**Status:** Live scheduled automation — verified via local execution and GitHub Actions (processes 10 SKUs and flags 5 exceptions in no more than 1 minute per run vs. a 15-minute manual review baseline).
 
 ## What it replaces
 
