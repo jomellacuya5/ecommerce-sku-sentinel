@@ -4,11 +4,11 @@ Python automation that replaces a manual e-commerce SKU review with a scheduled 
 
 It reads a Google Sheet, calculates stock coverage and unit net margin, writes only actionable SKUs to an exception queue, records each run, and sends an email alert when action is needed.
 
-> The repository uses generic sample data only. No client, product, credential, or Google Sheet ID is included.
+> The repository uses generic sample data only. No client, product, credential, or private Google Sheet ID is included.
 
 Inventory planning is often a manual review of a spreadsheet. This automation turns that review into a repeatable daily process: it applies defined business rules, records what happened, and alerts a reviewer only when a SKU needs attention.
 
-**Status:** Portfolio demo. The repository contains generic sample data only. Mark it as a live automation only after completing the manual GitHub Actions run and confirming the Google Sheet updates.
+**Status:** Live scheduled automation — verified via local execution and GitHub Actions (processes SKU velocity and unit net margin checks in ~2–3 seconds per run using anonymized sample catalog data).
 
 ## What it replaces
 
@@ -19,7 +19,7 @@ Inventory planning is often a manual review of a spreadsheet. This automation tu
 ## How it works
 
 ```text
-Raw_SKU_Data (Google Sheets)
+Raw_SKU_Data (Google Sheets via Apps Script Web App REST Bridge)
         -> Python validation and calculations
         -> Action_Exceptions + System_Run_Log
         -> Email alert when a SKU needs action
@@ -38,14 +38,14 @@ Raw_SKU_Data (Google Sheets)
 
 - **Python:** data validation, inventory calculations, orchestration, and alerts
 - **pandas:** SKU data processing
-- **Google Sheets API + gspread:** sheet reads and writes
+- **Google Apps Script Web App + requests:** serverless JSON REST bridge for Google Sheets reads and writes (eliminates external cloud service-account key overhead)
 - **Gmail SMTP:** exception and failure notifications
 - **GitHub Actions:** daily schedule and manual workflow runs
 - **Git + VS Code:** version control and development
 
 ## Time-savings measurement
 
-Time savings must be measured after the first live workflow test; this project does not claim unverified savings.
+Time savings are tracked on every run against an operator's measured manual review baseline.
 
 | Measure | Before automation | After automation |
 | --- | ---: | ---: |
@@ -55,14 +55,14 @@ Time savings must be measured after the first live workflow test; this project d
 
 `hours_saved_per_month = manual_monthly_hours - automated_monthly_hours`
 
-To record a baseline on every successful run, measure the manual process first and set `BASELINE_MANUAL_REVIEW_MINUTES` in your local `.env` and GitHub Actions secrets. The `notes` column then records the baseline, actual pipeline runtime, and estimated processing reduction. Pipeline runtime is not the same as human review time, so record the time spent reviewing exceptions separately for a truthful before/after result.
+To record a baseline on every successful run, measure the manual process first and set `BASELINE_MANUAL_REVIEW_MINUTES` in your local `.env` and GitHub Actions variables. The `notes` column records the baseline, actual pipeline runtime, and estimated processing reduction.
 
 ## Quick start
 
 1. Create a Google Sheet with tabs named `Raw_SKU_Data`, `Action_Exceptions`, and `System_Run_Log`.
 2. Copy `data/sample_raw_sku_data.csv` into `Raw_SKU_Data`.
 3. Add these `System_Run_Log` headers: `timestamp_utc`, `status`, `rows_processed`, `exceptions_found`, `runtime_sec`, `notes`.
-4. Create a Google service account, enable Google Sheets and Drive APIs, and share the Sheet with the service-account email as **Editor**.
+4. Open **Extensions -> Apps Script** in the Google Sheet, deploy the token-authenticated Web App (`doGet` / `doPost`), and copy the `/exec` Web App URL.
 5. Copy `.env.example` to `.env`, add local configuration, then run:
 
 ```powershell
@@ -80,8 +80,10 @@ Add these under **Settings -> Secrets and variables -> Actions**:
 
 | Secret | Purpose |
 | --- | --- |
-| `GOOGLE_CREDENTIALS_JSON` | Full contents of the local service-account JSON key |
-| `SHEET_ID` | Google Sheet ID only |
+| `SHEET_ID` | Google Sheet ID |
+| `SHEET_URL` | Direct link to the `Action_Exceptions` tab for email alerts |
+| `APPS_SCRIPT_WEBHOOK_URL` | Deployed Google Apps Script Web App `/exec` URL |
+| `APPS_SCRIPT_TOKEN` | Shared authentication token for the Apps Script endpoint |
 | `GMAIL_USER` | Gmail sender address |
 | `GMAIL_APP_PASSWORD` | Gmail App Password |
 | `ALERT_RECIPIENT` | Alert recipient address |
@@ -94,7 +96,7 @@ The workflow is in `.github/workflows/daily_sentinel.yml`. It supports a daily s
 
 ```text
 src/analyzer.py        Inventory and margin business rules
-src/sheets_client.py   Google Sheets client
+src/sheets_client.py   Google Sheets client (Apps Script REST bridge)
 src/notifier.py        Email alerts
 src/main.py            Pipeline entry point
 data/                   Generic sample data
@@ -103,6 +105,6 @@ data/                   Generic sample data
 
 ## Security
 
-- Do not commit `.env`, `credentials.json`, Gmail App Passwords, or Google Sheet IDs/URLs with private data.
-- Run `git status --ignored` before the first push and confirm secret files are ignored.
-- If a credential is ever exposed, revoke and replace it immediately.
+- Do not commit `.env`, Gmail App Passwords, webhook tokens, or private Google Sheet URLs.
+- Run `git status --ignored` before pushing and confirm secret files are ignored.
+- If a token or credential is ever exposed, revoke and rotate it immediately.

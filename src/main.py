@@ -44,7 +44,11 @@ def main() -> None:
     client: SheetsClient | None = None
     rows_processed = 0
     try:
-        client = SheetsClient(os.environ["SHEET_ID"], os.getenv("GOOGLE_CREDENTIALS_JSON"))
+        client = SheetsClient(
+            os.environ["SHEET_ID"],
+            os.environ["APPS_SCRIPT_WEBHOOK_URL"],
+            os.getenv("APPS_SCRIPT_TOKEN", "sentinel_secret_2026"),
+        )
         raw_data = client.read_raw_data()
         rows_processed = len(raw_data)
         exceptions = analyze_skus(raw_data)

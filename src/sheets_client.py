@@ -1,56 +1,73 @@
-"""Google Sheets access helpers."""
+"""Google Sheets access helpers via Apps Script Web App bridge."""
 
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
+from urllib.parse import urljoin
 
-import gspread
 import pandas as pd
-from google.oauth2.service_account import Credentials
-
-RAW_TAB = "Raw_SKU_Data"
-EXCEPTIONS_TAB = "Action_Exceptions"
-RUN_LOG_TAB = "System_Run_Log"
-SHEETS_SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+import requests
 
 
 class SheetsClient:
-    """Thin client for the three-tab Sentinel workbook."""
+    """Thin client for the three-tab Sentinel workbook via Apps Script REST API."""
 
-    def __init__(self, sheet_id: str, credentials_json: str | None = None) -> None:
-        self._spreadsheet = gspread.authorize(self._load_credentials(credentials_json)).open_by_key(sheet_id)
-
-    @staticmethod
-    def _load_credentials(credentials_json: str | None) -> Credentials:
-        if credentials_json:
-            return Credentials.from_service_account_info(json.loads(credentials_json), scopes=SHEETS_SCOPES)
-        path = Path(os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json"))
-        if not path.is_file():
-            raise FileNotFoundError(f"Google credentials file not found: {path}")
-        return Credentials.from_service_account_file(path, scopes=SHEETS_SCOPES)
+    def __init__(self, sheet_id: str, webhook_url: str | None = None, token: str | None = None) -> None:
+        self._sheet_id = sheet_id
+        self._webhook_url = webhook_url or os.environ["APPS_SCRIPT_WEBHOOK_URL"]
+        self._token = token or os.getenv("APPS_SCRIPT_TOKEN", "sentinel_secret_2026")
 
     @property
     def url(self) -> str:
-        return self._spreadsheet.url
+        return os.getenv("SHEET_URL", f"Sheet ID: {self._sheet_id}")
 
     def read_raw_data(self) -> pd.DataFrame:
-        return pd.DataFrame(self._spreadsheet.worksheet(RAW_TAB).get_all_records())
+        resp = requests.get(
+            self._webhook_url,
+            params={"token": self._token},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if "error" in payload:
+            raise PermissionError(f"Apps Script error: {payload['error']}")
+        return pd.DataFrame(payload["data"])
 
     def replace_exceptions(self, exceptions: pd.DataFrame) -> None:
-        worksheet = self._spreadsheet.worksheet(EXCEPTIONS_TAB)
-        worksheet.clear()
-        worksheet.update([exceptions.columns.tolist()] + exceptions.fillna("").values.tolist(), "A1")
+        rows = [exceptions.columns.tolist()] + exceptions.fillna("").values.tolist()
+        resp = requests.post(
+            self._webhook_url,
+            json={
+                "token": self._token,
+                "action": "replace_exceptions",
+                "rows": rows,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("status") != "ok":
+            raise RuntimeError(f"Failed to update Action_Exceptions: {payload}")
 
     def append_run_log(
-        self, timestamp_utc: str, status: str, rows_processed: int, exceptions_found: int,
-        runtime_sec: float, notes: str,
+        self,
+        timestamp_utc: str,
+        status: str,
+        rows_processed: int,
+        exceptions_found: int,
+        runtime_sec: float,
+        notes: str,
     ) -> None:
-        self._spreadsheet.worksheet(RUN_LOG_TAB).append_row(
-            [timestamp_utc, status, rows_processed, exceptions_found, round(runtime_sec, 2), notes],
-            value_input_option="USER_ENTERED",
+        resp = requests.post(
+            self._webhook_url,
+            json={
+                "token": self._token,
+                "action": "append_run_log",
+                "row": [timestamp_utc, status, rows_processed, exceptions_found, round(runtime_sec, 2), notes],
+            },
+            timeout=20,
         )
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("status") != "ok":
+            raise RuntimeError(f"Failed to append System_Run_Log: {payload}")
