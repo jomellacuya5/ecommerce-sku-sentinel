@@ -1,119 +1,108 @@
 # E-commerce SKU Sentinel
 
-Portfolio automation that monitors e-commerce inventory and unit economics in Google Sheets. It identifies stockout risk and low-margin SKUs, writes an operational exception queue, logs each run, and emails stakeholders when action is needed.
+Python automation that replaces a manual e-commerce SKU review with a scheduled inventory and margin-risk check.
 
-## Why this project
+It reads a Google Sheet, calculates stock coverage and unit net margin, writes only actionable SKUs to an exception queue, records each run, and sends an email alert when action is needed.
+
+> The repository uses generic sample data only. No client, product, credential, or Google Sheet ID is included.
 
 Inventory planning is often a manual review of a spreadsheet. This automation turns that review into a repeatable daily process: it applies defined business rules, records what happened, and alerts a reviewer only when a SKU needs attention.
 
 **Status:** Portfolio demo. The repository contains generic sample data only. Mark it as a live automation only after completing the manual GitHub Actions run and confirming the Google Sheet updates.
 
-## Workflow
+## What it replaces
+
+**Before:** An operator manually reviews a SKU spreadsheet, estimates days of stock remaining, checks margin, prepares an action list, and sends follow-up messages.
+
+**After:** A scheduled Python run applies the same rules consistently, produces an `Action_Exceptions` queue, logs every result in `System_Run_Log`, and emails the exception digest.
+
+## How it works
 
 ```text
-Google Sheet Raw_SKU_Data
-        |
-        v
-Python validation and SKU analysis
-        |
-        +--> Action_Exceptions (action queue)
-        +--> System_Run_Log (audit record)
-        +--> Email digest or failure alert
+Raw_SKU_Data (Google Sheets)
+        -> Python validation and calculations
+        -> Action_Exceptions + System_Run_Log
+        -> Email alert when a SKU needs action
 ```
 
-## Business rules
+### Rules
 
-| Signal | Rule | Result |
+| Signal | Rule | Output |
 | --- | --- | --- |
 | Stockout risk | `days_of_supply <= lead_time_days + safety_stock_days` | `REORDER NOW` |
 | Margin risk | `net_margin_pct < 15` | `LOW MARGIN AUDIT` |
 | Both risks | Both rules match | `REORDER + LOW MARGIN` |
-| No sales | `units_sold_30d = 0` | `days_of_supply = 999` |
+| Zero sales | `units_sold_30d = 0` | Uses `days_of_supply = 999` without division by zero |
 
-The pipeline rejects missing columns, invalid numeric values, negative stock or sales, and selling prices that are zero or below.
+## Tools used
 
-## Project structure
+- **Python:** data validation, inventory calculations, orchestration, and alerts
+- **pandas:** SKU data processing
+- **Google Sheets API + gspread:** sheet reads and writes
+- **Gmail SMTP:** exception and failure notifications
+- **GitHub Actions:** daily schedule and manual workflow runs
+- **Git + VS Code:** version control and development
 
-```text
-src/analyzer.py        Validates data and calculates inventory and margin signals
-src/sheets_client.py   Reads and writes the three Google Sheet tabs
-src/notifier.py        Sends Gmail exception and failure alerts
-src/main.py            Orchestrates the run, logging, and error handling
-data/                  Generic sample data only
-.github/workflows/     Scheduled GitHub Actions workflow
-docs/                  Process discovery, runbook, and measurement templates
-```
+## Time-savings measurement
 
-## Google Sheet schema
+Time savings must be measured after the first live workflow test; this project does not claim unverified savings.
 
-Create a spreadsheet with these tabs exactly:
+| Measure | Before automation | After automation |
+| --- | ---: | ---: |
+| Manual SKU-review minutes per run | Record baseline | Record exception-review time |
+| Runs per month | Record baseline | Record scheduled runs |
+| Monthly hours | `(minutes x runs) / 60` | `(minutes x runs) / 60` |
 
-### `Raw_SKU_Data`
+`hours_saved_per_month = manual_monthly_hours - automated_monthly_hours`
 
-Copy the ten generic rows from `data/sample_raw_sku_data.csv`. Required columns:
+To record a baseline on every successful run, measure the manual process first and set `BASELINE_MANUAL_REVIEW_MINUTES` in your local `.env` and GitHub Actions secrets. The `notes` column then records the baseline, actual pipeline runtime, and estimated processing reduction. Pipeline runtime is not the same as human review time, so record the time spent reviewing exceptions separately for a truthful before/after result.
 
-`sku_id`, `product_name`, `current_stock`, `units_sold_30d`, `lead_time_days`, `safety_stock_days`, `selling_price`, `unit_cogs`, `platform_fees`, `ad_spend_per_unit`
+## Quick start
 
-### `Action_Exceptions`
-
-The pipeline replaces this tab on every successful run with:
-
-`sku_id`, `product_name`, `flag_status`, `current_stock`, `daily_velocity`, `days_of_supply`, `reorder_threshold_days`, `suggested_reorder_qty`, `net_margin_pct`, `action_note`
-
-### `System_Run_Log`
-
-Add this header row before the first run:
-
-`timestamp_utc`, `status`, `rows_processed`, `exceptions_found`, `runtime_sec`, `notes`
-
-## Local setup
-
-In the VS Code terminal:
+1. Create a Google Sheet with tabs named `Raw_SKU_Data`, `Action_Exceptions`, and `System_Run_Log`.
+2. Copy `data/sample_raw_sku_data.csv` into `Raw_SKU_Data`.
+3. Add these `System_Run_Log` headers: `timestamp_utc`, `status`, `rows_processed`, `exceptions_found`, `runtime_sec`, `notes`.
+4. Create a Google service account, enable Google Sheets and Drive APIs, and share the Sheet with the service-account email as **Editor**.
+5. Copy `.env.example` to `.env`, add local configuration, then run:
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
 python -m src.main
 ```
 
-Add your real local settings only in `.env`. Put the downloaded Google service-account key in `credentials.json` at the repository root. Both files are ignored by Git.
+6. Add the repository secrets listed below, trigger the GitHub Actions workflow manually, and confirm the Sheet updates.
 
-## GitHub Actions setup
+## GitHub Actions secrets
 
-Add the following repository secrets under **Settings -> Secrets and variables -> Actions**:
+Add these under **Settings -> Secrets and variables -> Actions**:
 
-| Secret | Value |
+| Secret | Purpose |
 | --- | --- |
-| `GOOGLE_CREDENTIALS_JSON` | Entire contents of local `credentials.json` |
+| `GOOGLE_CREDENTIALS_JSON` | Full contents of the local service-account JSON key |
 | `SHEET_ID` | Google Sheet ID only |
-| `GMAIL_USER` | Gmail address used to send alerts |
-| `GMAIL_APP_PASSWORD` | 16-character Gmail App Password |
-| `ALERT_RECIPIENT` | Address that receives alerts |
+| `GMAIL_USER` | Gmail sender address |
+| `GMAIL_APP_PASSWORD` | Gmail App Password |
+| `ALERT_RECIPIENT` | Alert recipient address |
 
-The workflow supports a daily scheduled run and a manual run from the GitHub Actions tab. See `docs/runbook.md` for verification and incident steps.
+Add `BASELINE_MANUAL_REVIEW_MINUTES` as an Actions **variable** (not a secret) after measuring the average manual-review time.
 
-## Portfolio demonstration
+The workflow is in `.github/workflows/daily_sentinel.yml`. It supports a daily scheduled run and manual dispatch.
 
-After the live setup is verified, record a short screen demo:
+## Project structure
 
-1. Show the three Google Sheet tabs with only generic data.
-2. Show the GitHub repository and `src/analyzer.py` business rules.
-3. Trigger **Run workflow** in GitHub Actions.
-4. Show the successful workflow run, the updated exception queue, and the new log row.
-5. Show the safe failure behavior by describing the `FAILED` log and alert path; do not expose credentials.
-
-Use the measurement template in `docs/measurement.md` to state the time saved truthfully. Do not publish client data, credentials, sheet IDs, or email addresses.
-
-## Operating documentation
-
-- `docs/process-discovery.md` — questions for the inventory or Amazon expert before automating.
-- `docs/runbook.md` — setup checks, daily monitoring, and failure response.
-- `docs/measurement.md` — baseline and post-automation time-savings calculation.
+```text
+src/analyzer.py        Inventory and margin business rules
+src/sheets_client.py   Google Sheets client
+src/notifier.py        Email alerts
+src/main.py            Pipeline entry point
+data/                   Generic sample data
+.github/workflows/     GitHub Actions schedule
+```
 
 ## Security
 
-- This public repository contains generic sample data only.
-- Never commit `.env`, `credentials.json`, Gmail app passwords, or Google Sheet IDs/URLs containing private client data.
-- Check `git status --ignored` before every first push or credential change.
+- Do not commit `.env`, `credentials.json`, Gmail App Passwords, or Google Sheet IDs/URLs with private data.
+- Run `git status --ignored` before the first push and confirm secret files are ignored.
+- If a credential is ever exposed, revoke and replace it immediately.

@@ -28,4 +28,5 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
+          BASELINE_MANUAL_REVIEW_MINUTES: ${{ vars.BASELINE_MANUAL_REVIEW_MINUTES }}
         run: python -m src.main
