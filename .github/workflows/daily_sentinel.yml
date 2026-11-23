@@ -24,6 +24,7 @@ jobs:
       - name: Run SKU Sentinel
         env:
           SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_URL: ${{ secrets.SHEET_URL }}
           APPS_SCRIPT_WEBHOOK_URL: ${{ secrets.APPS_SCRIPT_WEBHOOK_URL }}
           APPS_SCRIPT_TOKEN: ${{ secrets.APPS_SCRIPT_TOKEN }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
